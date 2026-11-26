@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KPI Dashboard 2026</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  /* ===== สไตล์ตาราง Excel และปุ่มลอยกันหลง ===== */
+  #liveSheetWrapper{position:relative;margin:16px 0;background:#fff;border:1px solid #ddd;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.08);}
+  
+  /* ปุ่มลอยพิเศษ ลอยติดหน้าจอเสมอ ห้ามหาย */
+  #floatingReturnBtn{
+    position:fixed; bottom:24px; right:24px; z-index:99999;
+    padding:12px 24px; border:none; border-radius:999px;
+    background:#0066cc; color:#fff; font-family:'Sarabun',sans-serif;
+    font-size:15px; font-weight:700; cursor:pointer;
+    box-shadow:0 4px 16px rgba(0,0,0,0.3); transition:.2s;
+    display:none;
+  }
+  #floatingReturnBtn:hover{background:#004d99; transform:scale(1.05);}
+
+  #liveSheetBar{
+    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+    padding:12px 16px; background:#f0f4f8; border-bottom:1px solid #d1d5db;
+    font-family:'Sarabun',sans-serif; font-size:15px; font-weight:700; color:#333;
+  }
+  #liveSheetToggle{
+    padding:8px 16px; border:none; border-radius:999px;
+    background:#e74c3c; color:#fff; font-family:'Sarabun',sans-serif;
+    font-size:14px; font-weight:700; cursor:pointer;
+  }
+  #liveSheetToggle.closed{background:#27ae60;}
+  #liveSheetFrame{display:block;width:100%;height:540px;border:none;}
+  #liveSyncNote{font-size:13px;font-weight:500;color:#555;}
+</style>
+</head>
+<body>
+
+<!-- ปุ่มลอยที่จะโผล่มาช่วยคุณกดกลับแดชบอร์ดได้ตลอดเวลา -->
+<button id="floatingReturnBtn">📊 ⬅ กลับหน้าแดชบอร์ด (เลื่อนลงด้านล่าง)</button>
+
+<div class="app-container">
+
+  <!-- ===== ส่วนหัว ===== -->
+  <header class="header">
+    <div class="header-title">
+      <h1>📊 KPI Dashboard 2026</h1>
+      <p>ระบบติดตามและประเมินผลการตรวจแบบร้านค้า (Auto-Sync Excel)</p>
+    </div>
+    <div class="header-controls">
+      <div class="status-badge" id="statusBadge"><span class="dot"></span> <span id="statusText">Connecting...</span></div>
+      <span class="last-update" id="lastUpdate">อัปเดตล่าสุด: -</span>
+      <button class="btn-refresh" id="btnRefresh">🔄 Refresh Data</button>
+      <button class="btn-theme" id="btnTheme">🌙 Dark Mode</button>
+      <button id="btnToggleSheet" style="display:none"></button>
+    </div>
+  </header>
+
+  <section id="excelEmbedContainer" style="display:none"></section>
+
+  <!-- ===== ตาราง Google Sheets (ใส่ sandbox ป้องกันการเด้งหลุดออกนอกเว็บ) ===== -->
+  <section id="liveSheetWrapper">
+    <div id="liveSheetBar">
+      <span id="liveSyncNote">📗 ตาราง Excel (สด) — แก้ไขแล้วแดชบอร์ดด้านล่างจะอัปเดตเองภายใน 1 นาที</span>
+      <button id="liveSheetToggle">ซ่อนตาราง Excel</button>
+    </div>
+    <iframe id="liveSheetFrame" allow="clipboard-read; clipboard-write"></iframe>
+  </section>
+
+  <!-- ===== ตัวกรอง ===== -->
+  <section class="filters-section">
+    <div class="filter-group">
+      <label>สาขา (Mall):</label>
+      <div class="filter-chips" id="mallFilters">
+        <button class="chip active" data-mall="all">ทุกสาขา</button>
+        <button class="chip" data-mall="M3">M3</button>
+        <button class="chip" data-mall="M5">M5</button>
+        <button class="chip" data-mall="M6">M6</button>
+        <button class="chip" data-mall="M7">M7</button>
+        <button class="chip" data-mall="M8">M8</button>
+        <button class="chip" data-mall="M10">M10</button>
+      </div>
+    </div>
+    <div class="filter-group" id="whoFiltersContainer">
+      <label>ผู้รับผิดชอบ:</label>
+      <div class="filter-chips" id="whoFilters">
+        <button class="chip active" data-who="all">ทุกคน</button>
+      </div>
+    </div>
+    <div class="filter-row">
+      <div class="filter-item">
+        <label>หมวดหมู่:</label>
+        <select id="filterGrp">
+          <option value="all">ทุกหมวด</option>
+          <option value="SHOP">SHOP</option>
+          <option value="OP">OP</option>
+          <option value="COMMON">COMMON</option>
+          <option value="TEMP">TEMP</option>
+        </select>
+      </div>
+      <div class="filter-item search-box">
+        <label>ค้นหาแบรนด์ / ยูนิต:</label>
+        <input type="text" id="searchBox" placeholder="พิมพ์ชื่อแบรนด์, ยูนิต...">
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== แจ้งเตือน ===== -->
+  <section class="alerts-section" id="alertsSection" style="display:none;">
+    <div class="alert-box warning" id="validationAlert"></div>
+  </section>
+
+  <!-- ===== การ์ด KPI ===== -->
+  <section class="kpi-grid">
+    <div class="kpi-card"><h3>ร้านค้าทั้งหมด</h3><div class="value" id="kpiTotal">0</div></div>
+    <div class="kpi-card success"><h3>Approved</h3><div class="value" id="kpiApproved">0</div></div>
+    <div class="kpi-card warning"><h3>Approve บางส่วน</h3><div class="value" id="kpiPartial">0</div></div>
+    <div class="kpi-card danger"><h3>ยังไม่ Approved / ยกเลิก</h3><div class="value" id="kpiProgress">0</div></div>
+    <div class="kpi-card info"><h3>พื้นที่รวม (ตร.ม.)</h3><div class="value" id="kpiArea">0</div></div>
+    <div class="kpi-card"><h3>รอบแบบเฉลี่ย</h3><div class="value" id="kpiAvgRounds">0</div></div>
+  </section>
+
+  <!-- ===== กราฟ ===== -->
+  <section class="charts-grid">
+    <div class="chart-card"><h3>📈 กราฟ Approved รายเดือน</h3><div class="chart-container" id="monChart"></div></div>
+    <div class="chart-card"><h3>📊 สรุปสถานะตามหมวดงาน</h3><div class="chart-container" id="statusChart"></div></div>
+  </section>
+
+  <!-- ===== ตาราง ===== -->
+  <section class="tables-grid">
+    <div class="table-card full-width">
+      <h3>📋 สรุปภาพรวมสาขาและหมวดงาน (Matrix)</h3>
+      <div class="table-responsive">
+        <table id="matrixTable">
+          <thead><tr><th>สาขา</th><th>SHOP (ทั้งหมด/App)</th><th>OP (ทั้งหมด/App)</th><th>COMMON (ทั้งหมด/App)</th><th>TEMP (ทั้งหมด/App)</th><th>รวมทั้งหมด</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="table-card">
+      <h3>👤 สรุปผลงานรายผู้รับผิดชอบ</h3>
+      <div class="table-responsive">
+        <table id="personTable">
+          <thead><tr><th>ผู้ตรวจ</th><th>รับผิดชอบ</th><th>Approved</th><th>Partial</th><th>อื่น ๆ / ยกเลิก</th><th>% App</th><th>พื้นที่ (ตร.ม.)</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="table-card">
+      <h3>⚠️ แจ้งเตือนข้อมูลซ้ำ (Mall + Unit)</h3>
+      <div class="table-responsive">
+        <table id="duplicateTable">
+          <thead><tr><th>สาขา</th><th>ยูนิต</th><th>แบรนด์ที่ซ้ำกัน</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="table-card full-width">
+      <h3>🏢 รายละเอียดรายร้านค้า</h3>
+      <div class="table-responsive">
+        <table id="detailTable">
+          <thead><tr><th>สาขา</th><th>ยูนิต</th><th>แบรนด์</th><th>หมวด</th><th>พื้นที่ (ตร.ม.)</th><th>รอบแบบ</th><th>ผู้ตรวจ</th><th>สถานะ</th><th>วันที่ Approve</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="dashboard.js"></script>
+
+<script>
+(function () {
+  var SHEET_URL = 'https://docs.google.com/spreadsheets/d/1dA4_XnCNiNUjOyDFlqTUhMiy5RyO0cqa3etcQwlnLeg/edit';
+  var POLL_SEC = 30;
+
+  var frame = document.getElementById('liveSheetFrame');
+  var toggleBtn = document.getElementById('liveSheetToggle');
+  var floatBtn = document.getElementById('floatingReturnBtn');
+  var kpiGrid = document.querySelector('.kpi-grid');
+  var loaded = false;
+
+  function setOpen(open) {
+    if (open && !loaded) { frame.src = SHEET_URL; loaded = true; }
+    frame.style.display = open ? 'block' : 'none';
+    floatBtn.style.display = open ? 'block' : 'none'; // แสดงปุ่มลอยเมื่อเปิดตาราง Excel
+    toggleBtn.textContent = open ? 'ซ่อนตาราง Excel' : 'แสดงตาราง Excel';
+    toggleBtn.classList.toggle('closed', !open);
+    try { localStorage.setItem('kpiSheetOpen', open ? '1' : '0'); } catch (e) {}
+  }
+
+  toggleBtn.addEventListener('click', function () {
+    setOpen(frame.style.display === 'none');
+  });
+
+  // เมื่อกดปุ่มลอย จะเลื่อนหน้าจอลงมาที่การ์ด KPI ด้านล่างทันที
+  floatBtn.addEventListener('click', function () {
+    if (kpiGrid) {
+      kpiGrid.scrollIntoView({ behavior: 'smooth' });
+    }
+  });
+
+  var saved = null; try { saved = localStorage.getItem('kpiSheetOpen'); } catch (e) {}
+  setOpen(saved !== '0');
+
+  function refreshDashboard() {
+    var r = document.getElementById('btnRefresh');
+    if (r) r.click();
+  }
+
+  if (window.EventSource) {
+    var es = new EventSource('/api/events');
+    es.onmessage = function () { refreshDashboard(); };
+  }
+
+  setInterval(function () { if (!document.hidden) refreshDashboard(); }, POLL_SEC * 1000);
+})();
+</script>
+</body>
+</html>
